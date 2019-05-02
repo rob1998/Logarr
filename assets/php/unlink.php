@@ -10,4 +10,4 @@ ini_set('error_reporting', E_ALL);
 set_error_handler("LogarrErrorHandler");
 
 $file = ($_POST['file']);
-unlinkLog($file, true);
+echo json_encode(unlinkLog($file));

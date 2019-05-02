@@ -153,6 +153,13 @@ function isDocker() {
 	}
 }
 
+function isAuthenticationMissingKeys() {
+	if(!isset($GLOBALS["authentication"])) return "ERROR: Invalid Authentication Settings value";
+	if(!isset($GLOBALS["authentication"]['setupEnabled'])) return "ERROR: Invalid Authentication Settings value: 'setupEnabled'.";
+	if(!isset($GLOBALS["authentication"]['settingsEnabled'])) return "ERROR: Invalid Authentication Settings value: 'settingsEnabled'.";
+	if(!isset($GLOBALS["authentication"]['logsEnabled'])) return "ERROR: Invalid Authentication Settings value: 'logsEnabled'.";
+}
+
 // When user logs into SETTINGS, check config.json for all required AUTHENTICATION values and validity:
 function isMissingKeys() {
 
@@ -437,6 +444,12 @@ function parseLogPath($path)
 			return "ERROR: path is dynamic, only dynamic filenames are allowed!";
 		}
 	} else {
+		if(startsWith($path, "../") || startsWith($path, "..\\")
+			|| startsWith($path, ".") || startsWith($path, ".\\")) {
+			$path = realpath(__DIR__ . DIRECTORY_SEPARATOR . $path);
+		} else {
+			$path = realpath($path);
+		}
 		return $path; //if path doesn't contain *, return the path
 	}
 }
@@ -446,7 +459,8 @@ function readExternalLog($log)
 	$settings = $GLOBALS['settings'];
 	ini_set("auto_detect_line_endings", true);
 	$result = "";
-	$logContents = file(parseLogPath($log['path']));
+	$path = parseLogPath($log['path']);
+	$logContents = file($path);
 	$logContents = array_reverse($logContents);
 	$maxLines = isset($log['maxLines']) ? $log['maxLines'] : $settings['maxLines'];
 
@@ -458,167 +472,78 @@ function readExternalLog($log)
 	return $result;
 }
 
-function unlinkLog($file, $print)
+function unlinkLog($file)
 {
-	if ($print) echo('Unlink file: ' . $file  . '<br>');
-	if ($print) echo('Server received unlink file: ' . $file . '<br>');
-	if ($print) echo('Server attempting to unlink: ' . $file . '<br>');
-
+	$result = array(
+		"result" => "ERROR",
+		"data" => "Unkown error occurred",
+		"file" => $file
+	);
 	$today = date("D d M Y | H:i:s");
-	if ($print) echo "<br><br>";
 
 	if (in_array_recursive($file, $GLOBALS['logs'])) {   // check if log file exists:
 		if (is_file($file)) { // check if log file exists:
 			$newfile = "$file.bak";
 
 			if (!copy($file, $newfile)) {   // copy log file failed:
-				if ($print) echo "Copy log file: FAIL: $newfile";
-				$fh = fopen($file, 'a');
-				fwrite($fh, "$today | ERROR: Logarr was unable to copy log file:  $file\n");
-				fclose($fh);
-
-				if ($print) echo "<script type='text/javascript'>";
-				if ($print) echo "console.log('ERROR: Logarr failed to copy log file:  $file');";
-				if ($print) echo "</script>";
-
-				if ($print) echo('<br> <p class="rolllogfail"> Roll log file FAIL: ' . $file  . '</p>');
-				appendLog(
-					$logentry = "Roll Log: ERROR: Roll log file FAIL: $file "
-				);
-
-			} else {  // copy log file success:
-				if ($print) echo "Copy log file: SUCCESS: $newfile<br>";
-				if ($print) echo "<script type='text/javascript'>";
-				if ($print) echo "console.log('Copy log file: SUCCESS: $newfile');";
-				if ($print) echo "</script>";
-
-				appendLog(
-					$logentry = "Roll Log: Copy log file: SUCCESS: $newfile"
-				);
-
+				appendLog("Roll Log: ERROR: Logarr was unable to copy log file: $file ");
+				$result["data"] = "Logarr was unable to copy log file";
+				return $result;
+			}
+			else {  // copy log file success:
+				appendLog("Roll Log: Copy log file: SUCCESS: $newfile");
 				$delete = unlink($file);    // delete orginal log file:
 
 				if ($delete == true) {
-					if ($print) echo "Delete original log file: SUCCESS: $file <br>";
-					if ($print) echo "<script type='text/javascript'>";
-					if ($print) echo "console.log('Delete original log file: SUCCESS: $file');";
-					if ($print) echo"</script>";
-
-					appendLog(
-						$logentry = "Roll Log: Delete original log file: SUCCESS: $file"
-					);
-					
+					appendLog("Roll Log: Delete original log file: SUCCESS: $file");
 					$newlogfile = $file;
 
 					// Write log entry in new log file:
+					//TODO if appendlog returns a true or false value, the $current = and $createfile line can be removed
 					$current = $today . " | Logarr created new log file: " . $newlogfile . "\n";
 					$createfile = file_put_contents($newlogfile, $current);
+					//appendLog( "Logarr created new log file: " . $newlogfile);
 
 					if ($createfile == true) {
-						if ($print) echo "Create new log file: SUCCESS: " . $newlogfile . "<br>";
-						if ($print) echo "<script type='text/javascript'>";
-						if ($print) echo "console.log('Create new log file: SUCCESS:  $newlogfile');";
-						if ($print) echo "</script>";
-
-                        echo "<script type='text/javascript'>";
-                        echo "console.log('Roll log file SUCCESS: $file');";
-						echo "</script>";
-						
-						appendLog(
-							$logentry = "Roll Log file SUCCESS: $file"
-						);
-
-						if ($print) echo('<br> <p class="rolllogsuccess">Roll log file SUCCESS: ' . $file  . '</p>');
+						appendLog("Roll Log file SUCCESS: $file");
+						$result["result"] = "SUCCESS";
+						$result["data"] = "";
+						return $result;
 						
 					} else {
-						if ($print) echo "Create new log file: FAIL: " . $newlogfile . "<br>";
-						if ($print) echo "<script type='text/javascript'>";
-						if ($print) echo "console.log('ERROR: Create new log file: FAIL:  $newlogfile');";
-						if ($print) echo "</script>";
-
-						appendLog(
-							$logentry = "Roll Log: ERROR: Create new log file:  $newlogfile"
-						);
-
-						if ($print) echo('<br> <p class="rolllogfail"> Roll log file FAIL: ' . $file  . '</p>');
+						appendLog("Roll Log: ERROR: Create new log file:  $newlogfile");
+						$result["data"] = "Create new log file";
+						return $result;
 					}
-				} else {
-					if ($print) echo "Delete original log file: FAIL: $file<br>";
-					if ($print) echo "<script type='text/javascript'>";
-					if ($print) echo "console.log('ERROR: Delete original log file: FAIL: $file');";
-					if ($print) echo "</script>";
-
-					appendLog(
-						$logentry = "Roll Log: ERROR: Delete original log file: $file"
-					);
-
-					//write log file entry if unlink of original log file fails:
-					$fh = fopen($file, 'a');
-					fwrite($fh, "$today | Logarr delete original log file: FAIL (ERROR):  $file\n");
-					fclose($fh);
-
+				}
+				else {
+					appendLog("Roll Log: ERROR: Delete original log file: $file");
 					//remove copied log file if unlink of original log file fails:
 					$deletefail = unlink($newfile);
 
 					if ($deletefail == true) {
-						if ($print) echo "Delete log file backup: SUCCESS: $newfile";
-						if ($print) echo "<script type='text/javascript'>";
-						if ($print) echo "console.log('Delete log file backup: SUCCESS: $newfile');";
-						if ($print) echo "</script>";
-
-						appendLog(
-							$logentry = "Roll Log: Delete log file backup: SUCCESS: $newfile"
-						);
+						appendLog("Roll Log: Delete log file backup: SUCCESS: $newfile");
+						$result["data"] = "Could not delete original file, backup file deleted";
+						return $result;
 
 					} else {
-						if ($print) echo "Delete log file backup: FAIL: $newfile";
-						if ($print) echo "<script type='text/javascript'>";
-						if ($print) echo "console.log('ERROR: Delete log file backup: FAIL: $newfile');";
-						if ($print) echo "</script>";
-
-						appendLog(
-							$logentry = "Roll Log: ERROR: Delete log file backup: FAIL: $newfile"
-						);
-					};
-
-                    echo "<script type='text/javascript'>";
-                    echo "console.log('ERROR: Roll log FAILED: $file');";
-					echo "</script>";
-
-					appendLog(
-						$logentry = "Roll Log: ERROR: Roll log file:  $file "
-					);
-					
-					if ($print) echo('<br> <p class="rolllogfail"> Roll log file FAIL: ' . $file  . '</p>');
+						appendLog("Roll Log: ERROR: Delete log file backup: FAIL: $newfile");
+						$result["data"] = "Could not delete original file or backup file";
+						return $result;
+					}
 				}
 			}
 		} else {
-			if ($print) echo 'file: ' . $file . ' does not exist.';
-			if ($print) echo "<script type='text/javascript'>";
-			if ($print) echo "console.log('ERROR: file: $file does not exist.');";
-			if ($print) echo "</script>";
-
-			if ($print) echo("<br> <p class='rolllogfail'> ERROR: file: ' " . $file . " ' does not exist. </p>");
-
-			appendLog(
-				$logentry = "Roll Log: ERROR: file: $file does not exist "
-			);
-
-			phpLog($phpLogMessage = "Logarr Roll Log ERROR: file: $file does not exist");
+			appendLog("Roll Log: ERROR: file: $file does not exist ");
+			phpLog("Logarr Roll Log ERROR: file: $file does not exist");
+			$result["data"] = "file: $file does not exist";
+			return $result;
 		}
 	} else {  // Deny access if log file does NOT exist:
-		if ($print) echo 'ERROR:  Illegal File';
-		if ($print) echo "<script type='text/javascript'>";
-		if ($print) echo "console.log('ERROR:  Illegal File');";
-		if ($print) echo "</script>";
-
-		appendLog(
-			$logentry = "Roll Log: ERROR: Illegal File "
-		);
-
-		phpLog($phpLogMessage = "Logarr Roll Log ERROR: Illegal file.");
-
-		if ($print) echo("<br> <p class='rolllogfail'> ERROR:  Illegal File </p>");
+		appendLog("Roll Log: ERROR: Illegal File ");
+		phpLog("Logarr Roll Log ERROR: Illegal file.");
+		$result["data"] = "Illegal file";
+		return $result;
 	}
 }
 

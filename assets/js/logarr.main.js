@@ -4,8 +4,6 @@
 
 // Variables
 let results, currentIndex = 0;
-let logInterval = false;
-let current_rflog = 60000;
 let nIntervId = [];
 let home = false;
 
@@ -156,14 +154,9 @@ function logrollmodal() {
         onBeforeOpen: () => {
 
             //TODO: //Turn OFF autorefresh before log roll attempt // Works but will re-enabled w/ rfconfig:
-
+            //TODO What?
             $("#autoUpdateSlider").attr("data-enabled", "false");
-            clearInterval(nIntervId["logRefresh"]);
-            clearInterval(nIntervId);
-            clearInterval(refreshblockUI, settings.rflog);
-            clearInterval(refreshblockUI);
-            logInterval = false;
-
+            clearInterval(nIntervId["refreshLogs"]);
         },
         onClose: () => {
 
@@ -177,15 +170,6 @@ function logrollmodal() {
             loadLogs();
 
         }
-    })
-};
-
-function logrollerror() {
-    Toast.fire({
-        toast: true,
-        type: 'error',
-        title: 'An error occurred while attempting log roll!',
-        background: 'rgba(207, 0, 0, 0.75)'
     })
 };
 
@@ -308,7 +292,7 @@ function nosearch() {
 
 // Reload Setup page after user creation / Setup complete:
 function sareload() {
-    let timerInterval
+    let timerInterval;
     Toast.fire({
         toast: true,
         showCloseButton: false,
@@ -399,7 +383,6 @@ function usererror() {
 
 function refreshblockUI() {
     $('#body').addClass("cursorwait");
-    logupdatetoast();
     setTimeout(function () {
         loadLogs();
     }, 300);
@@ -425,93 +408,16 @@ function refreshblockUI() {
 
 // Load logs
 function loadLogs() {
-    console.log('Logarr log update START');
-    var categories = [];
-    var html = "";
-    var filter = window.location.hash.substr(1);
-    filter = filter.split(",");
-    for (let i = 0; i < logs.length; i++) {
-        if (logs[i].enabled == "Yes") {
-            if (typeof logs[i].category == "undefined") logs[i].category = "Uncategorized";
-            if ((filter[0] == "" || filter.indexOf(logs[i].category) != -1)) {
-                if (document.getElementById(logs[i].logTitle.replace(/\s/g, "-") + "-log-container") == null) {
-                    $("#logwrapper").append("<div id='" + logs[i].logTitle.replace(/\s/g, "-") + "-log-container' data-category='" + logs[i].category + "' data-index='" + i + "' class='flex-child log-container'></div>");
-                }
-                $("#" + logs[i].logTitle.replace(/\s/g, "-") + "-log-container").data("category", logs[i].category);
-                $("#" + logs[i].logTitle.replace(/\s/g, "-") + "-log-container").data("index", i);
-                loadLog(logs[i]);
-            }
-            if (typeof logs[i].category != "undefined" && categories.indexOf(logs[i].category) == -1 && logs[i].category != "All") {
-                categories.push(logs[i].category);
-            } else if (typeof logs[i].category == "undefined" && categories.indexOf("Uncategorized") == -1) {
-                categories.push("Uncategorized");
-            }
+    logupdatetoast();
+    $("#logcontainer").load("index.php #logwrapper", function( response, status, xhr ) {
+        if ( status === "error" ) {
+            const msg = "Sorry but there was an error: ";
+            $( "#error" ).html( msg + xhr.status + " " + xhr.statusText );
         }
-        if (logs[i].enabled == "No") {
-            // TODO / bug :  Remove log from display if disabled
-            var logTitle = logs[i].logTitle;
-            console.log("Log disabled: " + logTitle);
-            // TODO: not sure if this is the best way to do this but it works:
-            $("#" + logs[i].logTitle.replace(/\s/g, "-") + "-log-container").addClass("hidden");
-        } else {
-            $("#" + logs[i].logTitle.replace(/\s/g, "-") + "-log-container").removeClass("hidden");
-        }
-    }
-    if (categories.length > 0 && !(categories.length == 1 && categories[0] == "Uncategorized")) {
-        //console.log("choice 1");
-        var allFilter = (filter[0] == "" || arraySubset(filter, categories)) ? "true" : "false";
-        var categoryFilter = window.location.hash.substr(1);
-        if (allFilter == "true") categoryFilter = categories.join(",");
-
-        html += "<div class='category-item'>" +
-            "<div class='category-filter-item'>All</div>" +
-            "<label class=\"switch category-switch\" title=\"Display All\">" +
-            "<span class=\"slider round\" data-enabled=\"" + allFilter + "\" onclick=\"toggleCategory('', '" + categoryFilter + "');\"></span>" +
-            "</label>" +
-            "</div>";
-
-        categories.sort();
-        for (let i = 0; i < categories.length; i++) {
-            var catFilter = (allFilter == "true" || filter.indexOf(categories[i]) != -1) ? "true" : "false";
-            html += "<div class='category-item'>" +
-                "<div class='category-filter-item'>" + categories[i] + "</div>" +
-                "<label class=\"switch category-switch\" title=\"Hide/display Category\">" +
-                "<span class=\"slider round\" data-enabled=\"" + catFilter + "\" onclick=\"toggleCategory('" + categories[i] + "', '" + categoryFilter + "');\"></span>" +
-                "</label>" +
-                "</div>";
-        }
-
-        $('#categoryFilter').html(html);
-        $('#categoryFilter').show();
-    } else {
-        //console.log("choice 2");
-        $('#categoryFilter').hide();
-    }
-
-    setTimeout(function () {
-        $('#body').removeClass("cursorwait");
         Toast.close();
-    }, 2000);
+    });
 }
 
-function loadLog(log) {
-
-    var logTitle = log.logTitle;
-
-    $.ajax({
-        url: "assets/php/load-log.php",
-        data: { 'log': log },
-        type: "POST",
-        success: function (response) {
-            $("#" + logTitle.replace(/\s/g, "-") + "-log-container").html(response);
-            console.log("Updated log: " + logTitle);
-        },
-        error: function (jqXHR, textStatus, errorThrown) {
-            console.log("ERROR: AJAX error while loading logs!");
-            logerror();
-        }
-    })
-}
 
 // highlight terms:
 function highlightjs() {
@@ -724,16 +630,29 @@ $(function () {
         $.ajax({
             type: 'POST',
             url: 'assets/php/unlink.php',
-            processData: false,
+            dataType: "json",
             data: "file=" + $(".path[data-service='" + $(this).data('service') + "']").html().trim(),
             success: function (data) {
-                $('#modalContent').html(data);
-                let modal = $('#responseModal');
-                modal.fadeIn('slow');
+                if(data.result === "SUCCESS") {
+                    Toast.fire({
+                        type: 'success',
+                        title: data.result + ": Log rolled"
+                    });
+                } else {
+                    Toast.fire({
+                        type: 'error',
+                        title: data.result + ": " + data.data,
+                        background: 'rgba(207, 0, 0, 0.75)'
+                    });
+                }
             },
             error: function (jqXHR, textStatus, errorThrown) {
                 console.log("ERROR: unlink ajax posting failed");
-                logrollerror();
+                Toast.fire({
+                    type: 'error',
+                    title: 'An error occurred while attempting log roll!',
+                    background: 'rgba(207, 0, 0, 0.75)'
+                })
             }
         });
         return false;
@@ -804,29 +723,6 @@ function refreshConfig() {
                 }
             }
 
-            //$("#auto-update-status").attr("data-enabled", settings.logRefresh);
-
-            //TODO: this can probably be handled better
-            // if(home) {
-            //     if (settings.logRefresh === "true" && (logInterval === false || settings.rflog !== current_rflog)) {
-            //         clearInterval(nIntervId["logRefresh"]);
-            //         nIntervId["logRefresh"] = setInterval(refreshblockUI, settings.rflog);
-            //         logInterval = true;
-            //         $("#autoUpdateSlider").attr("data-enabled", "true");
-            //         current_rflog = settings.rflog;
-            //         console.log("Log auto update: Enabled | Interval: " + settings.rflog + " ms");
-            //         uetoast();
-            //     } else if (settings.logRefresh === "false" && logInterval === true) {
-            //         clearInterval(nIntervId["logRefresh"]);
-            //         clearInterval(nIntervId);
-            //         clearInterval(refreshblockUI, settings.rflog);
-            //         logInterval = false;
-            //         $("#autoUpdateSlider").attr("data-enabled", "false");
-            //         console.log("Log auto update: Disabled");
-            //         udtoast();
-            //     }
-            // }
-
             if (home) {
                 document.title = preferences.sitetitle; //update index.php page title to configured site title
             }
@@ -847,93 +743,17 @@ function refreshConfig() {
     });
 }
 
-function refreshLog() {
-
-    $.ajax({
-        url: "assets/php/sync-config.php",
-        type: "GET",
-        success: function (response) {
-
-            let json = JSON.parse(response);
-            settings = json.settings;
-            logs = json.logs;
-
-            $("#auto-update-status").attr("data-enabled", settings.logRefresh);
-
-            if (home) {
-                //Check if rflog has valid value, if not, disable log auto refresh:
-
-                if (settings.rflog < 3001 || settings.rflog == null || settings.rflog === false) {
-                    console.log("%cERROR: Log refresh settings value is INVALID", "color: red;");
-                    console.log("Log auto update: Disabled");
-                    clearInterval(nIntervId["logRefresh"]);
-                    clearInterval(nIntervId);
-                    clearInterval(refreshblockUI, settings.rflog);
-                    logInterval = false;
-                    $("#autoUpdateSlider").attr("data-enabled", "false");
-                    $('#auto-update').addClass("auto-updateError");
-                    $('#autoUpdateSlider').addClass("auto-updateError");
-                    document.getElementById("autoUpdateSlider").onclick = function () {
-                        return false;
-                    };
-                    validerror();
-                } else {
-                    if (settings.logRefresh === "true" && (logInterval === false || settings.rflog !== current_rflog)) {
-                        clearInterval(nIntervId["logRefresh"]);
-                        nIntervId["logRefresh"] = setInterval(refreshblockUI, settings.rflog);
-                        logInterval = true;
-                        $("#autoUpdateSlider").attr("data-enabled", "true");
-                        current_rflog = settings.rflog;
-                        console.log("Log auto update: Enabled | Interval: " + settings.rflog + " ms");
-                        uetoast();
-                    } else if (settings.logRefresh === "false" && logInterval === true) {
-                        clearInterval(nIntervId["logRefresh"]);
-                        clearInterval(nIntervId);
-                        clearInterval(refreshblockUI, settings.rflog);
-                        logInterval = false;
-                        $("#autoUpdateSlider").attr("data-enabled", "false");
-                        console.log("Log auto update: Disabled");
-                        udtoast();
-                    }
-                }
-            }
-        },
-        error: function (jqXHR, textStatus, errorThrown) {
-            console.log("%cERROR: Log refresh failed!", "color: red;");
-
-            setTimeout(function () {
-
-                syncconfigerror();
-
-            }, 120000);
-        }
-    });
-}
-
-
 function overwriteLogUpdate() {
-
-    //TODO:  Not working:
 
     if ($("#autoUpdateSlider").attr("data-enabled") === "false") {
         $("#autoUpdateSlider").attr("data-enabled", "true");
-        clearInterval(nIntervId);
-        nIntervId = setInterval(refreshblockUI, settings.rflog);
-        logInterval = true;
+        clearInterval(nIntervId["refreshLogs"]);
+        nIntervId["refreshLogs"] = setInterval(refreshblockUI, settings.rflog);
         console.log("Log auto update: Enabled | Interval: " + settings.rflog + " ms");
         uetoast();
-        //TODO CHANGE ME
-        // setTimeout(function () {
-        //     refreshblockUI();
-        // }, 1000);
     } else {
         $("#autoUpdateSlider").attr("data-enabled", "false");
-        //TODO: Adding everything possible to stop rfconfig from re-applying values:
-        clearInterval(nIntervId["logRefresh"]);
-        clearInterval(nIntervId);
-        clearInterval(refreshblockUI, settings.rflog);
-        clearInterval(refreshblockUI);
-        logInterval = false;
+        clearInterval(nIntervId["refreshLogs"]);
         console.log("Log auto update: Disabled");
         udtoast();
     }
