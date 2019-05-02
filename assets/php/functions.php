@@ -451,7 +451,7 @@ function readExternalLog($log)
 	$maxLines = isset($log['maxLines']) ? $log['maxLines'] : $settings['maxLines'];
 
 	foreach ($logContents as $line_num => $line) {
-		$result .= "<font color='white'><strong><i>Line {$line_num}</i></strong></font> : " . htmlspecialchars($line) . "<br />\n";
+		$result .= "<strong><i>Line " . ($line_num + 1) . "</i></strong> : " . htmlspecialchars($line) . "<br />\n";
 		if ($maxLines != 0 && $line_num == $maxLines) break;
 	}
 	unset($logContents);
